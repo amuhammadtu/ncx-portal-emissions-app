@@ -1,0 +1,8 @@
+name: ncx-portal-emissions-app
+runtime: go
+description: SEAL Golden Path Cloud Run + IAP + BigQuery + Agentspace infrastructure for NCX Portal Emission Analytics (ENG-2079)
+config:
+  gcp:project:
+    value: tu-data-edw-pr-1
+  gcp:region:
+    value: australia-southeast1

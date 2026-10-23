@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "description": "SEAL Golden Path DDD0 deterministic postEdit quality & security hooks (ENG-2081)",
+  "hooks": {
+    "postEdit": [
+      {
+        "name": "ruff-lint-and-format-check",
+        "command": "ruff check src/ tests/",
+        "blocking": true
+      },
+      {
+        "name": "bandit-sast-scan",
+        "command": "bandit -r src/ -ll -q",
+        "blocking": true
+      }
+    ]
+  }
+}

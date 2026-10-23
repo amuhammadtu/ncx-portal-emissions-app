@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "ncx-portal-emissions-agent",
+  "displayName": "NorthConnex (NCX) Tunnel Ventilation & Portal Emission Analytics Agent",
+  "description": "Investigates NorthConnex (M11) tunnel ventilation SCADA telemetry (tu-data-edw-pr-1.a113_roadside), S2 on-ramp flow reversals, TQ158 Rule 2k off-ramp vs on-ramp control asymmetry, and Oct 16-17 Forced Level 3 test performance.",
+  "version": "1.0.0",
+  "owner": {
+    "team": "Asset Management — Tunnel Ventilation & Roadside Systems",
+    "costCentre": "AM-VENTILATION-113",
+    "epic": "ENG-2075"
+  },
+  "protocol": "A2A",
+  "authentication": {
+    "type": "google_iap_workforce_identity",
+    "workforcePool": "locations/global/workforcePools/agentspace-entra-id-p-oidc-exnat",
+    "requiredGroups": [
+      "grp-tu-am-ventilation-engineers",
+      "grp-tu-ncx-operations"
+    ]
+  },
+  "endpoints": {
+    "ui": "https://ncx-portal-emissions.apps.transurban.com",
+    "health": "https://ncx-portal-emissions.apps.transurban.com/_stcore/health",
+    "agentCard": "https://ncx-portal-emissions.apps.transurban.com/.well-known/agent.json"
+  },
+  "capabilities": {
+    "streaming": true,
+    "mcpServers": [
+      {
+        "name": "bigquery-a113-roadside",
+        "project": "tu-data-edw-pr-1",
+        "dataset": "a113_roadside",
+        "timezoneRule": "DATETIME(timestamp_utc, 'Australia/Sydney') AS timestamp_aest",
+        "maxBytesBilled": 5368709120
+      }
+    ],
+    "skills": [
+      {
+        "id": "ncx-s2-reversal-rca",
+        "name": "S2 On-Ramp Reversal & TQ158 Rule 2k RCA",
+        "description": "Explains why Section S6 (SB Off-Ramp) is protected by TQ158 Rule 2k while Section S2 (SB On-Ramp) experiences 98.4% negative flow and 58.1% of all portal alarms."
+      },
+      {
+        "id": "ncx-oct16-l3-test-audit",
+        "name": "Oct 16-17 Forced Level 3 Overnight Test Audit",
+        "description": "Analyzes the 23:00-05:00 AEST forced Level 3 ventilation test across all 16 tunnel sections and VS01/VS04 axial fans."
+      }
+    ]
+  }
+}

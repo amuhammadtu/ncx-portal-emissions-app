@@ -1,0 +1,44 @@
+[project]
+name = "ncx-portal-emissions-app"
+version = "1.0.0"
+description = "NorthConnex (NCX) Tunnel Ventilation & Portal Emission Analytics — SEAL Golden Path Streamlit + BigQuery Application (ENG-2075)"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Asset Management Engineering", email = "am-engineering@transurban.com" }
+]
+dependencies = [
+    "streamlit>=1.40.0",
+    "google-cloud-bigquery[bqstorage,pandas]>=3.26.0",
+    "google-auth>=2.35.0",
+    "requests>=2.32.0",
+    "pandas>=2.2.0",
+    "numpy>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.8.0",
+    "bandit>=1.7.10",
+]
+
+[tool.uv]
+# Transurban Sensible Default (DDD2): Proxy PyPI packages via JFrog Artifactory
+index-url = "https://transurban.jfrog.io/artifactory/api/pypi/pypi-remote/simple"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+ignore = ["S101", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101", "B608"]
