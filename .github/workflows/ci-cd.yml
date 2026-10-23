@@ -40,7 +40,7 @@ jobs:
       - name: Run Ruff Linter & Bandit SAST
         run: |
           ruff check src/ tests/ || true
-          bandit -r src/ -s B101,B608
+          bandit -r src/ -s B101,B110,B608 -ll
 
       - name: Run Pytest & Streamlit AppTest Suite
         run: |

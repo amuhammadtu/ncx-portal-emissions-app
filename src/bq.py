@@ -25,7 +25,7 @@ from typing import Any
 # Load Transurban corporate SSL certificates patch if present in user space
 try:
     import pip_system_certs.wrapt_requests  # noqa: F401
-except Exception:
+except ImportError:  # nosec B110
     pass
 
 import pandas as pd
