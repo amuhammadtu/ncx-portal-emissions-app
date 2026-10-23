@@ -12,6 +12,7 @@ $env:APP_ENV = "local"
 $env:APP_NAME = "ncx-portal-emissions-app"
 $env:GCP_PROJECT_ID = if ($env:GCP_PROJECT_ID) { $env:GCP_PROJECT_ID } else { "tu-data-edw-pr-1" }
 $env:BQ_LOCATION = "australia-southeast1"
+$env:DEFAULT_DATA_MODE = if ($env:DEFAULT_DATA_MODE) { $env:DEFAULT_DATA_MODE } else { "live_bigquery" }
 $env:DEV_USER_EMAIL = if ($env:DEV_USER_EMAIL) { $env:DEV_USER_EMAIL } else { "$env:USERNAME@transurban.com" }
 
 Write-Host "=================================================================" -ForegroundColor Cyan

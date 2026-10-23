@@ -3,7 +3,8 @@
 # Uploads your local folder directly to Google Cloud Build & Cloud Run v2
 # ==============================================================================
 param(
-    [string]$ProjectId = "tu-data-edw-pr-1",
+    [string]$ProjectId = "tu-roads-watertreatment-sb-1",
+    [string]$BqProjectId = "tu-data-edw-pr-1",
     [string]$Region = "australia-southeast1",
     [string]$ServiceName = "ncx-portal-emissions-app",
     [string]$EnvName = "dev",
@@ -47,6 +48,7 @@ if (-not $GcloudBin) {
     Write-Host "`n[i] gcloud.cmd not found in PATH -- using Pure-Python ADC Cloud Run v2 Deployer (deploy_cloudrun_adc.py)..." -ForegroundColor Yellow
     & "C:\Program Files\Python314\python.exe" "$AppDir\deploy_cloudrun_adc.py" `
         --project-id $ProjectId `
+        --bq-project-id $BqProjectId `
         --region $Region `
         --service-name $ServiceName `
         --env $EnvName
@@ -67,7 +69,7 @@ $DeployArgs = @(
     "--max-instances", "5",
     "--session-affinity",
     "--no-allow-unauthenticated",
-    "--set-env-vars", "APP_NAME=$ServiceName,APP_ENV=$EnvName,GCP_PROJECT_ID=$ProjectId,BQ_LOCATION=$Region,DEFAULT_DATA_MODE=live_bigquery"
+    "--set-env-vars", "APP_NAME=$ServiceName,APP_ENV=$EnvName,GCP_PROJECT_ID=$BqProjectId,BQ_LOCATION=$Region,DEFAULT_DATA_MODE=live_bigquery"
 )
 
 if ($EnableIap) {

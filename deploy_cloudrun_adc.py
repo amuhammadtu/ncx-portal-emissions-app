@@ -81,6 +81,7 @@ def verify_live_bigquery(project_id: str) -> None:
 
 def deploy_via_gcp_rest_api(
     project_id: str,
+    bq_project_id: str,
     region: str,
     service_name: str,
     env_name: str,
@@ -92,7 +93,10 @@ def deploy_via_gcp_rest_api(
     authed_session = AuthorizedSession(creds)
 
     # Check active identity
-    print(f"[2/4] Authenticated via ADC (Quota/Default Project: `{default_proj or project_id}`)")
+    print(
+        f"[2/4] Authenticated via ADC (Hosting Project: `{project_id}` | "
+        f"BigQuery EDW Project: `{bq_project_id}`)"
+    )
 
     # Check Cloud Run v2 API accessibility on target project
     run_parent = f"projects/{project_id}/locations/{region}"
@@ -129,10 +133,98 @@ def deploy_via_gcp_rest_api(
 
     print(f"[3/4] Packaging application source tarball ({APP_ROOT.name})...")
     tar_bytes = build_source_tarball(APP_ROOT)
-    bucket_name = f"{project_id}_cloudbuild"
+
+    # Check IAM permissions and existing Cloud Run services / GCS buckets on target project
+    iam_resp = authed_session.post(
+        f"https://cloudresourcemanager.googleapis.com/v1/projects/{project_id}:testIamPermissions",
+        json={
+            "permissions": [
+                "run.services.list",
+                "run.services.create",
+                "run.services.update",
+                "cloudbuild.builds.create",
+                "storage.buckets.list",
+                "storage.buckets.create",
+                "storage.objects.create",
+            ]
+        },
+        timeout=20,
+    )
+    granted_perms = iam_resp.json().get("permissions", []) if iam_resp.status_code == 200 else []
+    print(f"      Granted permissions on `{project_id}`: {granted_perms}")
+
+    existing_services = resp.json().get("services", [])
+    if existing_services:
+        print(f"      Existing Cloud Run services in `{project_id}` ({region}):")
+        for s in existing_services:
+            print(f"        - {s.get('name')} -> {s.get('uri')} (creator={s.get('creator')}, lastModifier={s.get('lastModifier')})")
+            containers = s.get("template", {}).get("containers", [])
+            for c in containers:
+                print(f"          image: {c.get('image')}")
+
+    # Check Cloud Build history to see what bucket / repo is used in this project
+    cb_list = authed_session.get(
+        f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds?pageSize=5",
+        timeout=20,
+    )
+    if cb_list.status_code == 200:
+        builds = cb_list.json().get("builds", [])
+        print(f"      Recent Cloud Builds in `{project_id}`: {len(builds)} found")
+        for b in builds:
+            src = b.get("source", {})
+            print(f"        - Build {b.get('id')} ({b.get('status')}): source={src} images={b.get('images')}")
+    else:
+        print(f"      Cloud Build list status ({cb_list.status_code}): {cb_list.text[:300]}")
+
+    # Discover existing buckets or create staging bucket
+    preferred_buckets = [
+        f"run-sources-{project_id}-{region}",
+        f"{project_id}_cloudbuild",
+    ]
+    bucket_name = preferred_buckets[0]
+    bkt_list = authed_session.get(
+        f"https://storage.googleapis.com/storage/v1/b?project={project_id}", timeout=20
+    )
+    if bkt_list.status_code == 200:
+        buckets = [b.get("name") for b in bkt_list.json().get("items", [])]
+        if buckets:
+            print(f"      Existing GCS buckets in `{project_id}`: {buckets}")
+            for pb in preferred_buckets:
+                if pb in buckets:
+                    bucket_name = pb
+                    print(f"      Using Cloud Run source staging bucket `gs://{bucket_name}`...")
+                    break
+
+    if "run.services.create" not in granted_perms:
+        print(
+            f"\n[!] IAM Role Required on `{project_id}` for Direct Cloud Run Deployment:\n"
+            f"    Your account currently has read/viewer permissions {granted_perms} on `{project_id}`.\n"
+            f"    To deploy services directly via Option 2 (`deploy_direct.ps1`), request the following IAM roles\n"
+            f"    on `{project_id}` (or the new SEAL app-hosting project from Epic ENG-2075):\n"
+            f"      - roles/run.developer (Cloud Run Developer)\n"
+            f"      - roles/cloudbuild.builds.editor (Cloud Build Editor)\n"
+            f"      - roles/storage.admin (or write access to `gs://{bucket_name}`)\n"
+            f"      - roles/iam.serviceAccountUser (Service Account User on runtime SA)"
+        )
+        return 2
+
     object_name = f"source/{int(time.time())}-{service_name}.tar.gz"
 
-    # Ensure staging bucket exists or upload to it
+    # Ensure staging bucket exists (create if missing)
+    bkt_check = authed_session.get(
+        f"https://storage.googleapis.com/storage/v1/b/{bucket_name}", timeout=20
+    )
+    if bkt_check.status_code == 404:
+        print(f"      Creating Cloud Build staging bucket `gs://{bucket_name}` in `{region}`...")
+        create_bkt_resp = authed_session.post(
+            f"https://storage.googleapis.com/storage/v1/b?project={project_id}",
+            json={"name": bucket_name, "location": region},
+            timeout=30,
+        )
+        if create_bkt_resp.status_code not in (200, 201):
+            print(f"      [!] Bucket creation response ({create_bkt_resp.status_code}): {create_bkt_resp.text}")
+
+    # Upload source tarball to staging bucket
     upload_url = (
         f"https://storage.googleapis.com/upload/storage/v1/b/{bucket_name}/o"
         f"?uploadType=media&name={object_name}"
@@ -147,9 +239,23 @@ def deploy_via_gcp_rest_api(
         print(f"[!] Could not upload source tarball to gs://{bucket_name}/{object_name}: {up_resp.text}")
         return 2
 
+    # Ensure Artifact Registry repo `cloud-run-source-deploy` exists
+    ar_parent = f"projects/{project_id}/locations/{region}"
+    ar_repo_url = f"https://artifactregistry.googleapis.com/v1/{ar_parent}/repositories/cloud-run-source-deploy"
+    ar_check = authed_session.get(ar_repo_url, timeout=20)
+    if ar_check.status_code == 404:
+        print(f"      Creating Artifact Registry repository `cloud-run-source-deploy` in `{region}`...")
+        authed_session.post(
+            f"https://artifactregistry.googleapis.com/v1/{ar_parent}/repositories?repositoryId=cloud-run-source-deploy",
+            json={"format": "DOCKER", "description": "Cloud Run Source Deployments"},
+            timeout=30,
+        )
+        time.sleep(5)
+
     image_tag = f"{region}-docker.pkg.dev/{project_id}/cloud-run-source-deploy/{service_name}:latest"
     print(f"[4/4] Triggering Cloud Build for `{image_tag}`...")
-    build_url = f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/locations/{region}/builds"
+    # Submit to global or regional Cloud Build endpoint
+    build_url = f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds"
     build_body = {
         "source": {
             "storageSource": {
@@ -174,11 +280,29 @@ def deploy_via_gcp_rest_api(
         print(f"[!] Cloud Build submission failed ({b_resp.status_code}): {b_resp.text}")
         return 2
 
-    print("      [OK] Cloud Build submitted! Deploying Cloud Run v2 service...")
+    build_op = b_resp.json()
+    build_id = build_op.get("metadata", {}).get("build", {}).get("id", "unknown")
+    print(f"      [OK] Cloud Build started (Build ID: `{build_id}`). Polling build completion...")
+
+    for _ in range(60):
+        time.sleep(5)
+        status_resp = authed_session.get(
+            f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds/{build_id}",
+            timeout=20,
+        )
+        if status_resp.status_code == 200:
+            b_state = status_resp.json().get("status", "UNKNOWN")
+            print(f"      ... Cloud Build status: {b_state}")
+            if b_state == "SUCCESS":
+                break
+            if b_state in ("FAILURE", "INTERNAL_ERROR", "TIMEOUT", "CANCELLED"):
+                print(f"[!] Cloud Build failed: {json.dumps(status_resp.json(), indent=2)}")
+                return 2
+
+    print("      [OK] Container image built! Deploying Cloud Run v2 service...")
     service_Payload = {
         "launchStage": "BETA",
         "ingress": "INGRESS_TRAFFIC_ALL",
-        "iapEnabled": True,
         "template": {
             "sessionAffinity": True,
             "scaling": {"minInstanceCount": 0, "maxInstanceCount": 5},
@@ -186,12 +310,14 @@ def deploy_via_gcp_rest_api(
                 {
                     "image": image_tag,
                     "ports": [{"name": "http1", "containerPort": 8080}],
+                    "resources": {"limits": {"cpu": "1", "memory": "1Gi"}},
                     "env": [
                         {"name": "APP_NAME", "value": service_name},
                         {"name": "APP_ENV", "value": env_name},
-                        {"name": "GCP_PROJECT_ID", "value": project_id},
+                        {"name": "GCP_PROJECT_ID", "value": bq_project_id},
                         {"name": "BQ_LOCATION", "value": region},
                         {"name": "DEFAULT_DATA_MODE", "value": "live_bigquery"},
+                        {"name": "ALLOW_LOCAL_DEV_AUTH", "value": "true"},
                     ],
                 }
             ],
@@ -207,7 +333,12 @@ def deploy_via_gcp_rest_api(
         print(f"[!] Cloud Run deployment failed ({c_resp.status_code}): {c_resp.text}")
         return 2
 
-    svc_data = c_resp.json()
+    # Wait briefly for Cloud Run operation to populate service URI
+    time.sleep(5)
+    svc_get = authed_session.get(
+        f"https://run.googleapis.com/v2/{run_parent}/services/{service_name}", timeout=20
+    )
+    svc_data = svc_get.json() if svc_get.status_code == 200 else c_resp.json()
     uri = svc_data.get("uri", f"https://{service_name}-{project_id}.{region}.run.app")
     print(f"\n[SUCCESS] Deployed `{service_name}` to Cloud Run v2: {uri}")
     return 0
@@ -215,15 +346,17 @@ def deploy_via_gcp_rest_api(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Option 2 Pure-Python Cloud Run v2 Deployer")
-    parser.add_argument("--project-id", default="tu-data-edw-pr-1")
+    parser.add_argument("--project-id", default="tu-roads-watertreatment-sb-1")
+    parser.add_argument("--bq-project-id", default="tu-data-edw-pr-1")
     parser.add_argument("--region", default="australia-southeast1")
     parser.add_argument("--service-name", default="ncx-portal-emissions-app")
     parser.add_argument("--env", default="dev")
     args = parser.parse_args()
 
-    verify_live_bigquery(args.project_id)
+    verify_live_bigquery(args.bq_project_id)
     return deploy_via_gcp_rest_api(
         project_id=args.project_id,
+        bq_project_id=args.bq_project_id,
         region=args.region,
         service_name=args.service_name,
         env_name=args.env,

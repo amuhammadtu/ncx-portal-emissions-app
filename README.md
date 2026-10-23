@@ -11,6 +11,9 @@ workforce_pool: locations/global/workforcePools/agentspace-entra-id-p-oidc-exnat
 
 # NorthConnex (NCX) Tunnel Ventilation & Portal Emission Analytics (`ENG-2075`)
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/amuhammadtu/ncx-portal-emissions-app?quickstart=1)
+[![SEAL Golden Path CI/CD](https://github.com/amuhammadtu/ncx-portal-emissions-app/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/amuhammadtu/ncx-portal-emissions-app/actions/workflows/ci-cd.yml)
+
 Production-ready **Option 1 (Hybrid Golden Path Container)** implementation of the **NorthConnex (M11) Tunnel Ventilation & Portal Emission Root Cause Analysis Dashboard**, packaged to comply with the **Transurban SEAL Team App Hosting Guidance (`ENG-2075` / Project GravityWell / Google Garden)**.
 
 ---
