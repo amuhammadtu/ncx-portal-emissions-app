@@ -44,12 +44,13 @@ Write-Host " Data Mode: Live BigQuery (tu-data-edw-pr-1.a113_roadside)" -Foregro
 Write-Host "=================================================================" -ForegroundColor Cyan
 
 if (-not $GcloudBin) {
-    Write-Host "`n[!] Google Cloud CLI (gcloud.cmd) was not found in PATH or standard user-space folders." -ForegroundColor Yellow
-    Write-Host "    Note: Your Python BigQuery ADC credentials at '$env:APPDATA\gcloud\application_default_credentials.json' ARE active for Live BigQuery queries." -ForegroundColor Green
-    Write-Host "    To deploy containers to Cloud Run from this laptop without admin/UAC, install the portable Google Cloud SDK to user space or run from your ZPA Cloud Workstation:" -ForegroundColor Cyan
-    Write-Host "    1. Download https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-cli-windows-x86_64.zip to `$env:LOCALAPPDATA\Google\Cloud SDK\" -ForegroundColor Gray
-    Write-Host "    2. Re-run .\deploy_direct.ps1" -ForegroundColor Gray
-    exit 1
+    Write-Host "`n[i] gcloud.cmd not found in PATH -- using Pure-Python ADC Cloud Run v2 Deployer (deploy_cloudrun_adc.py)..." -ForegroundColor Yellow
+    & "C:\Program Files\Python314\python.exe" "$AppDir\deploy_cloudrun_adc.py" `
+        --project-id $ProjectId `
+        --region $Region `
+        --service-name $ServiceName `
+        --env $EnvName
+    exit $LASTEXITCODE
 }
 
 $DeployArgs = @(
@@ -73,5 +74,5 @@ if ($EnableIap) {
     $DeployArgs += "--iap"
 }
 
-Write-Host "Executing: `"$GcloudBin`" $($DeployArgs -join ' ')" -ForegroundColor Yellow
+Write-Host "Executing: $GcloudBin $($DeployArgs -join ' ')" -ForegroundColor Yellow
 & $GcloudBin @DeployArgs

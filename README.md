@@ -17,7 +17,16 @@ Production-ready **Option 1 (Hybrid Golden Path Container)** implementation of t
 
 ## 1. Architecture Overview (Option 1: Hybrid Golden Path Container)
 
-![SEAL Golden Path End-to-End Architecture](./docs/diagrams/seal_golden_path_architecture.png)
+```mermaid
+flowchart LR
+    User["Transurban Engineer<br/>(Microsoft Entra ID)"] -->|"OIDC / WIF"| IAP["Cloud Run Direct IAP<br/>(ES256 JWT Verification)"]
+    Agentspace["Google Agentspace<br/>(.well-known/agent.json)"] -->|"A2A Discovery"| IAP
+    IAP -->|"Authenticated Session"| App["Cloud Run v2 Gen2 Container<br/>(src/app.py + src/auth.py)"]
+    App -->|"Storage Read API + 5 GiB Cap<br/>(Australia/Sydney AEST)"| BQ[("BigQuery EDW<br/>tu-data-edw-pr-1.a113_roadside")]
+    App -->|"60fps Dynamic Payload"| UI["16-Zone NCX Schematic &<br/>5-Row Chart.js Canvas"]
+    App -->|"RCA Grounding + Thumbs Feedback"| ADK["Vertex AI ADK Sidekick<br/>(src/agent_sidekick.py)"]
+    App -->|"Structured JSON + OTel Spans"| Logs["Cloud Logging &<br/>Cloud Trace"]
+```
 
 This repository combines:
 1. **SEAL Golden Path Cloud Run + IAP + FinOps Backend (`src/auth.py`, `src/bq.py`, `src/telemetry.py`)**:
@@ -31,10 +40,8 @@ This repository combines:
 
 ### Reference Documentation (`docs/`)
 - **[Epic `ENG-2075` Specification](./docs/epic.md)** — SEAL App Hosting Guidance Epic & Business Outcome.
-- **[Jira Stories `ENG-2079`–`ENG-2085`](./docs/stories.md)** — Acceptance Criteria & Definition of Done across all 7 stories.
+- **[Jira Stories `ENG-2076`–`ENG-2088`](./docs/stories.md)** — Acceptance Criteria & Definition of Done across all 13 stories.
 - **[Google Garden Reference Architecture](./docs/google-garden-architecture.md)** — Transurban AI Factory / Project GravityWell architecture patterns.
-- **[Implementation Plan & Options Matrix](./docs/ncx_hosting_implementation_plan.md)** — Detailed Option 1 / 2 / 3 trade-off matrix and altitude mapping.
-- **[Verification Walkthrough](./docs/walkthrough.md)** — Full test suite results, diagrams, and traceability verification.
 
 ---
 

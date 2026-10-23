@@ -101,15 +101,27 @@ def deploy_via_gcp_rest_api(
 
     if resp.status_code == 403:
         err_msg = resp.json().get("error", {}).get("message", resp.text)
-        print(f"\n[!] Cloud Run IAM Notice on project `{project_id}`:")
+        print(f"\n[!] Cloud Run IAM / API Notice on project `{project_id}`:")
         print(f"    {err_msg}")
-        print("\n    Why this happened:")
-        print(
-            f"    - Your ADC token has full read/query access to `{project_id}.a113_roadside` (BigQuery),\n"
-            f"      which is an EDW data warehouse project, whereas Cloud Run app hosting requires\n"
-            f"      `roles/run.admin` + `roles/cloudbuild.builds.editor` in your app-hosting project\n"
-            f"      (tracked as Issue I1 in Epic ENG-2075: `tu-data-apps-dev` vs `{project_id}`)."
+        # Discover other GCP projects accessible to the user where Cloud Run may be enabled
+        crm_resp = authed_session.get(
+            "https://cloudresourcemanager.googleapis.com/v1/projects", timeout=20
         )
+        if crm_resp.status_code == 200:
+            projects = crm_resp.json().get("projects", [])
+            print(f"\n[i] Accessible GCP Projects for your account ({len(projects)} found):")
+            for p in projects:
+                pid = p.get("projectId")
+                pname = p.get("name")
+                pstate = p.get("lifecycleState")
+                if pstate == "ACTIVE":
+                    # Check if Cloud Run API is enabled on this project
+                    r_check = authed_session.get(
+                        f"https://run.googleapis.com/v2/projects/{pid}/locations/{region}/services",
+                        timeout=10,
+                    )
+                    run_status = "Cloud Run ENABLED" if r_check.status_code == 200 else f"Cloud Run status={r_check.status_code}"
+                    print(f"    - {pid} ({pname}) -> [{run_status}]")
         return 2
     elif resp.status_code != 200:
         print(f"\n[!] Unexpected Cloud Run API response ({resp.status_code}): {resp.text}")
