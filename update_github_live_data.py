@@ -661,7 +661,55 @@ def main() -> int:
     print(f"      - {DOCS_DIR / 'index.html'} (/docs GitHub Pages Interactive App)")
     print(f"      - {DOCS_DIR / 'streamlit.html'} (Serverless Python Streamlit via WebAssembly)")
     print(f"      - {DOCS_DIR / 'live_bq_data.json'} (Live BigQuery data snapshot)")
+    ensure_github_pages_enabled()
     return 0
+
+
+def ensure_github_pages_enabled(repo: str = "amuhammadtu/ncx-portal-emissions-app") -> None:
+    """Attempt to enable or verify GitHub Pages via Git Credential Manager token."""
+    import subprocess
+    import requests
+
+    try:
+        proc = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        token = None
+        for line in proc.stdout.splitlines():
+            if line.startswith("password="):
+                token = line.split("=", 1)[1].strip()
+                break
+        if not token:
+            return
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        get_resp = requests.get(f"https://api.github.com/repos/{repo}/pages", headers=headers, timeout=15)
+        if get_resp.status_code == 200:
+            html_url = get_resp.json().get("html_url")
+            print(f"      [GitHub Pages] Active at: {html_url}")
+            return
+
+        create_resp = requests.post(
+            f"https://api.github.com/repos/{repo}/pages",
+            headers=headers,
+            json={"build_type": "legacy", "source": {"branch": "main", "path": "/docs"}},
+            timeout=15,
+        )
+        if create_resp.status_code in (200, 201, 409):
+            html_url = create_resp.json().get("html_url", f"https://amuhammadtu.github.io/ncx-portal-emissions-app/")
+            print(f"      [GitHub Pages] Enabled! Live URL: {html_url}")
+        else:
+            print(f"      [GitHub Pages] Status ({create_resp.status_code}): {create_resp.text[:200]}")
+    except Exception as exc:
+        print(f"      [GitHub Pages] Info: {exc}")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,13 @@ from __future__ import annotations
 
 from datetime import date
 import os
+from pathlib import Path
+import sys
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 import streamlit as st
 import streamlit.components.v1 as components
 
